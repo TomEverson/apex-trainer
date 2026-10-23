@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { RecoilShots, RecoilSummary } from '../common/lib/recoil'
 import type { Tip } from '../common/lib/tracking'
 import { exitFullscreen, toggleFullscreen } from '../common/lib/fullscreen'
-import { buildDrill, getWeapon, RecoilGuide, TrainerView, zoomedFov, type Drill, type RunResult } from '../domain/trainer'
+import { buildDrill, getWeapon, RecoilGuide, strafeTimeline, TrainerView, zoomedFov, type Drill, type RunResult } from '../domain/trainer'
 import { computeRecoilSummary, diagnoseRecoil, RecoilResultsPanel } from '../domain/analysis'
 import { saveRecoilSessionFn } from '../domain/sessions'
 import { degPerCount, degPerUnit, useSettings } from '../domain/settings'
@@ -45,7 +45,8 @@ function RecoilPlayRoute() {
   const onFinish = useCallback(async (result: RunResult) => {
     const { run } = result
     if (run.kind !== 'recoil') return
-    const summary = computeRecoilSummary(run.shots)
+    const timeline = recoil.mode === 'strafe' ? strafeTimeline(recoil.weapon, recoil.magSize) : []
+    const summary = computeRecoilSummary(run.shots, timeline)
     const tips = diagnoseRecoil(summary)
     const empty = summary.shots === 0
     setResult({ summary, shots: run.shots, tips, saveStatus: empty ? 'Not saved (no shots fired).' : 'Saving…' })

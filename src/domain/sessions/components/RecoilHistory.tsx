@@ -38,6 +38,8 @@ export function RecoilHistory({ sessions, order }: Props) {
         const d = runs.at(-1)?.drill
         if (!d) return null
         const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length
+        const strafe = runs.some((r) => r.summary.strafe)
+        const headers = strafe ? [...HEADERS.slice(0, 2), 'A/D', 'Switch lag', ...HEADERS.slice(2)] : HEADERS
         return (
           <section key={id} className="rounded-xl border border-line bg-surface p-4">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -63,7 +65,7 @@ export function RecoilHistory({ sessions, order }: Props) {
               <table className="mt-3 w-full border-collapse text-[13px] tabular-nums">
                 <thead>
                   <tr className="text-muted">
-                    {HEADERS.map((h, i) => (
+                    {headers.map((h, i) => (
                       <th key={h} className={`border-b border-line px-2 py-1.5 font-medium ${i ? 'text-right' : 'text-left'}`}>{h}</th>
                     ))}
                   </tr>
@@ -71,8 +73,12 @@ export function RecoilHistory({ sessions, order }: Props) {
                 <tbody className="text-ink-2">
                   {runs.slice(-10).reverse().map((r) => {
                     const s = r.summary
+                    const st = s.strafe
+                    const strafeCells = strafe
+                      ? [pct0(st?.timing), st?.medianLagMs == null ? '—' : `${Math.round(st.medianLagMs)} ms`]
+                      : []
                     const cells = [
-                      pct(s.hitRate), pct0(s.vertComp), pct0(s.horizComp), deg(s.meanErrDeg), deg(s.vertBiasDeg), deg(s.horizBiasDeg),
+                      pct(s.hitRate), ...strafeCells, pct0(s.vertComp), pct0(s.horizComp), deg(s.meanErrDeg), deg(s.vertBiasDeg), deg(s.horizBiasDeg),
                       `${deg(s.phases.early.meanErrDeg)} / ${deg(s.phases.late.meanErrDeg)}`, deg(s.firstShotErrDeg), deg(s.consistencyDeg),
                       r.degPerCount.toFixed(4),
                     ]

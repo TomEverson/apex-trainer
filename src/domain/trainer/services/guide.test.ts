@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { sprayGuide } from './guide'
 import { buildDrill, getWeapon, SPRAYS_PER_RUN, WEAPONS } from './weapons'
 
-const PREFS = { rangeM: 20, target: 'static' as const, magTier: 3, barrelTier: 0, sprays: 10, adsScale: 1, zoom: 1 }
+const PREFS = { rangeM: 20, target: 'static' as const, magTier: 3, barrelTier: 0, sprays: 10, adsScale: 1, zoom: 1, mode: 'pure' as const, strafeAudio: true }
 
 function drillFor(id: string) {
   const w = getWeapon(id)

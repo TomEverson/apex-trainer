@@ -41,7 +41,7 @@ export function RecoilGuide({ drill }: { drill: RecoilDrill }) {
         {spray.map(([x, y], i) => <circle key={i} cx={x} cy={y} r={1.6} className="fill-ink-2" opacity={0.6} />)}
         <path d={path(pull)} fill="none" className="stroke-series-1" strokeWidth={2.5} strokeLinejoin="round" />
         <circle cx={pull[0][0]} cy={pull[0][1]} r={3.5} className="fill-ink" />
-        {g.marks.map((b, i) => (
+        {!g.strafe.length && g.marks.map((b, i) => (
           <g key={b}>
             <circle cx={pull[b][0]} cy={pull[b][1]} r={8} className="fill-series-1" />
             <text x={pull[b][0]} y={pull[b][1] + 4} textAnchor="middle" className="fill-white text-[11px] font-bold">{i + 1}</text>
@@ -51,7 +51,23 @@ export function RecoilGuide({ drill }: { drill: RecoilDrill }) {
         <text x={HALF_W * 1.5} y={H + 14} textAnchor="middle" className="fill-muted text-[13px]">Your mouse</text>
       </svg>
 
-      <ol className="mt-3 space-y-2">
+      {g.strafe.length > 0 && (
+        <ol className="mt-3 space-y-1.5">
+          {g.strafe.map((seg) => (
+            <li key={seg.start} className="flex items-baseline gap-2 tabular-nums">
+              <span className={`w-12 shrink-0 rounded px-1.5 py-0.5 text-center text-xs font-bold ${seg.dir < 0 ? 'bg-series-1 text-white' : seg.dir > 0 ? 'bg-[#e0a84a] text-bg' : 'bg-surface-2 text-ink-2'}`}>
+                {seg.dir < 0 ? '◄ A' : seg.dir > 0 ? 'D ►' : 'wait'}
+              </span>
+              <span>
+                {seg.from ? <span className="text-ink">Bullets {seg.from}–{seg.to}</span> : <span className="text-ink">Windup</span>}
+                <span className="text-muted"> · {seg.start.toFixed(2)}–{seg.end.toFixed(2)} s</span>
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+
+      <ol className={`mt-3 space-y-2 ${g.strafe.length ? 'hidden' : ''}`}>
         {g.steps.map((s, i) => (
           <li key={s.from} className="flex gap-2 leading-snug">
             <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-series-1 text-xs font-bold text-white">{i + 1}</span>

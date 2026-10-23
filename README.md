@@ -29,6 +29,7 @@ Spray full magazines at a legend-sized target and pull against the recoil. Each 
 - **Weapons:** the Season 30 ARs, SMGs and LMGs: R-301, Flatline, Havoc, Hemlok, Nemesis, R-99, Alternator, Volt, C.A.R., Prowler (burst and full-auto), Devotion, L-STAR, Spitfire, Rampage.
 - **Options:** range up to 200 m, 1x–4x optics (zoomed view and ADS-scaled turning), magazine and barrel tiers, and a static or strafing target.
 - **Spray guide:** a side panel shows the pattern, the mouse path that cancels it and step-by-step pull instructions. `Tab` toggles it.
+- **Recoil Pure / Recoil Strafe:** Strafe adds each weapon's A/D strafe pattern (from apexrecoilstrafing.com, Season 28.1). A cue bar and left/right beeps tell you when to switch, A/D actually move you, and you're scored on timing, switch lag and missed switches.
 - **Analysis:** how much of the vertical and horizontal recoil you cancelled (100% = perfect, >100% = over-pulling), error in the early, middle and late part of each spray, first-bullet aim, and consistency between sprays. Results include a spray plot of your average spray against the no-pull pattern.
 
 ### Hearing
@@ -54,6 +55,8 @@ Patterns change with balance patches, so every weapon card says how far to trust
 - **Measured:** a capture with no known recoil change since (R-301, Flatline, Volt, C.A.R.).
 - **May be outdated:** the capture predates a recoil patch, or its source marks it old (R-99, Prowler full-auto, Havoc, Alternator, Devotion, L-STAR, Spitfire, Rampage).
 - **Estimated:** no capture exists; the shape is a guess (Hemlok Breach, Nemesis, Prowler burst).
+
+Strafe patterns (A/D timing) come from [apexrecoilstrafing.com](https://www.apexrecoilstrafing.com/) (up to date with Season 28.1), which keeps ahn99's strafe patterns current. While strafing you move at the weapon's real ADS speed (AR 2.2, SMG 3.3, LMG 1.8 m/s) and track the target as it slides. Holding the right key cancels a shot's sideways recoil, Apex's "recoil smoothing" as far as it's documented. The vertical climb is left as is, since the game's reduction of it has never been measured.
 
 Barrel-stabilizer scaling is an approximation. Each run stores the exact pattern it was played with, so recapturing a weapon never rewrites history. Recaptures are very welcome: see the [capture method](https://github.com/metaflow/apex-recoil/blob/main/docs/capture.md) and `spec/phases/p0/006-recoil-control.md`.
 

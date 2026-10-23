@@ -6,13 +6,18 @@
  * Compensation compares each spray's drift since its first bullet with the
  * uncompensated pattern offset stored per shot.
  */
-import type { RecoilShots, RecoilSummary } from '../../../common/lib/recoil'
+import type { RecoilShots, RecoilSummary, StrafeSegment } from '../../../common/lib/recoil'
 import type { Tip } from '../../../common/lib/tracking'
 import { wrapDeg } from './metrics'
 
 const DEG = Math.PI / 180
 /** Below this RMS sideways pattern offset there's nothing horizontal to compensate. */
 const MIN_HORIZ_RMS_DEG = 0.15
+
+/** Strafe scoring: sample step, and how early / late a switch may land and still count. */
+const STRAFE_STEP_S = 0.005
+const SWITCH_EARLY_S = 0.25
+const SWITCH_LATE_S = 0.4
 
 const r3 = (x: number) => Math.round(x * 1000) / 1000
 const r3n = (x: number | null) => (x === null ? null : r3(x))
@@ -30,7 +35,62 @@ function std(a: number[]): number | null {
 }
 const rate = (hits: number[]) => (hits.length ? r3(hits.filter((h) => h > 0).length / hits.length) : null)
 
-export function computeRecoilSummary(S: RecoilShots): RecoilSummary {
+/**
+ * Recoil Strafe: compare the A/D log of each spray with the weapon's strafe
+ * timeline, sampled every 5 ms from the trigger press to the end of the spray.
+ */
+export function computeStrafeSummary(S: NonNullable<RecoilShots['strafe']>, timeline: StrafeSegment[]): NonNullable<RecoilSummary['strafe']> {
+  let match = 0, wrong = 0, idle = 0, total = 0
+  const phaseMatch = timeline.map(() => 0), phaseTotal = timeline.map(() => 0)
+  const lags: number[] = []
+  let switches = 0, missed = 0
+  const end = timeline.at(-1)?.end ?? 0
+
+  S.pressT.forEach((press, k) => {
+    const sprayEnd = Math.min(S.endT[k] ?? press, press + end)
+    const ev = S.t.map((t, i) => ({ t, dir: S.dir[i] })).filter((_, i) => S.spray[i] === k)
+    const dirAt = (t: number) => {
+      let d = 0
+      for (const e of ev) if (e.t <= t) d = e.dir
+      return d
+    }
+    for (let t = press; t < sprayEnd; t += STRAFE_STEP_S) {
+      const p = timeline.findIndex((seg) => t - press < seg.end)
+      if (p < 0) break
+      const want = timeline[p].dir, got = dirAt(t)
+      total++
+      phaseTotal[p]++
+      if (got === want) { match++; phaseMatch[p]++ }
+      else if (want !== 0 && got === 0) idle++
+      else wrong++
+    }
+    // Switches: each change to a new strafe direction inside this spray.
+    timeline.forEach((seg, i) => {
+      if (i === 0 || seg.dir === 0 || seg.dir === timeline[i - 1].dir) return
+      const at = press + seg.start
+      if (at >= sprayEnd) return
+      switches++
+      if (dirAt(at - SWITCH_EARLY_S) === seg.dir) return lags.push(-SWITCH_EARLY_S * 1000)
+      const hit = ev.find((e) => e.t >= at - SWITCH_EARLY_S && e.t <= at + SWITCH_LATE_S && e.dir === seg.dir)
+      if (hit) lags.push((hit.t - at) * 1000)
+      else missed++
+    })
+  })
+
+  const share = (x: number) => (total ? r3(x / total) : null)
+  return {
+    timing: share(match),
+    wrongDir: share(wrong),
+    idle: share(idle),
+    switches,
+    missed,
+    medianLagMs: r3n(median(lags)),
+    meanAbsLagMs: r3n(mean(lags.map(Math.abs))),
+    perPhase: phaseTotal.map((n, p) => (n ? r3(phaseMatch[p] / n) : null)),
+  }
+}
+
+export function computeRecoilSummary(S: RecoilShots, timeline: StrafeSegment[] = []): RecoilSummary {
   const n = S.t.length
   const ex: number[] = [], ey: number[] = []
   for (let i = 0; i < n; i++) {
@@ -108,6 +168,7 @@ export function computeRecoilSummary(S: RecoilShots): RecoilSummary {
     consistencyDeg: r3n(mean(spreads)),
     sprayHitRates,
     thirds,
+    ...(S.strafe && timeline.length ? { strafe: computeStrafeSummary(S.strafe, timeline) } : {}),
   }
 }
 
@@ -139,6 +200,20 @@ export function diagnoseRecoil(s: RecoilSummary): Tip[] {
   }
   if (s.consistencyDeg !== null && s.consistencyDeg > 0.9) {
     tips.push({ key: 'inconsistent', text: `Your sprays differ by ${s.consistencyDeg.toFixed(2)}° bullet-for-bullet. Do the same pull every time first, then fix its shape — a repeatable wrong pull is easier to correct than a random one.` })
+  }
+  const st = s.strafe
+  if (st && st.timing !== null) {
+    if (st.wrongDir !== null && st.wrongDir > 0.15) {
+      tips.push({ key: 'strafe-wrong', text: `You held the wrong strafe key ${pctOf(st.wrongDir)} of the time. Learn the order first: open the guide (Tab) and say it out loud — "D, A, D" — before you speed it up.` })
+    }
+    if (st.switches && st.missed / st.switches > 0.25) {
+      tips.push({ key: 'strafe-missed', text: `${st.missed} of ${st.switches} strafe switches never happened within 0.4 s. Switch on the beep; a late switch still helps more than none.` })
+    }
+    if (st.medianLagMs !== null && st.medianLagMs > 120) {
+      tips.push({ key: 'strafe-late', text: `Your strafe switches land ${Math.round(st.medianLagMs)} ms late on average. You're reacting to the cue; count the rhythm and switch on it instead.` })
+    } else if (st.medianLagMs !== null && st.medianLagMs < -100) {
+      tips.push({ key: 'strafe-early', text: `Your strafe switches come ${Math.round(-st.medianLagMs)} ms early. Hold each direction until the cue — the spray is still drifting that way.` })
+    }
   }
   const [a, , c] = s.thirds
   if (a !== null && c !== null && c < a - 0.1) {

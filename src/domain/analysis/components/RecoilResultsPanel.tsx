@@ -33,6 +33,16 @@ export function RecoilResultsPanel({ drill, summary: s, shots, tips, saveStatus,
     ['Bullets', String(s.shots), `Over ${s.sprays} sprays`],
     ['Sprays by third', s.thirds.map(pct).join(' · '), 'First · middle · last sprays'],
   ]
+  const st = s.strafe
+  const strafeStats: [string, string, string][] = st
+    ? [
+        ['A/D timing', pct(st.timing), 'Time holding the right strafe key'],
+        ['Switch lag', st.medianLagMs === null ? '—' : `${st.medianLagMs > 0 ? '+' : ''}${Math.round(st.medianLagMs)} ms`, `Median, + = late · mean |lag| ${st.meanAbsLagMs === null ? '—' : `${Math.round(st.meanAbsLagMs)} ms`}`],
+        ['Missed switches', `${st.missed} / ${st.switches}`, 'Not made within 0.4 s'],
+        ['Wrong key / no key', `${pct(st.wrongDir)} / ${pct(st.idle)}`, 'Share of the spray'],
+        ['Timing by phase', st.perPhase.map((v) => (v === null ? '—' : `${Math.round(v * 100)}`)).join(' · '), 'Each strafe phase, % on the right key'],
+      ]
+    : []
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
       <h2 className="text-xl font-semibold">{drill.name}</h2>
@@ -41,6 +51,22 @@ export function RecoilResultsPanel({ drill, summary: s, shots, tips, saveStatus,
         <span className="ml-2 text-muted">hits</span>
       </div>
       <p className="text-sm text-muted">{saveStatus}</p>
+
+      {strafeStats.length > 0 && (
+        <>
+          <h3 className="mt-6 mb-2.5 text-sm tracking-wider text-ink-2 uppercase">A/D strafe</h3>
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-2">
+            {strafeStats.map(([k, v, d]) => (
+              <div key={k} className="rounded-xl border border-line bg-surface p-3">
+                <div className="text-lg font-bold tabular-nums">{v}</div>
+                <div className="mt-0.5 text-xs text-ink-2">{k}</div>
+                <div className="mt-1 text-[11px] leading-snug text-muted">{d}</div>
+              </div>
+            ))}
+          </div>
+          <h3 className="mt-6 text-sm tracking-wider text-ink-2 uppercase">Recoil</h3>
+        </>
+      )}
 
       <div className="mt-5 grid gap-4 md:grid-cols-[minmax(0,320px)_1fr]">
         <SprayPlot drill={drill} summary={s} shots={shots} />

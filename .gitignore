@@ -6,3 +6,9 @@ dist
 .dev.vars
 .env
 .DS_Store
+
+# Gameplay recordings (measurement clips) stay local
+*.mp4
+*.mov
+*.mkv
+*.webm

@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, type RefObject } from 'react'
 import type { Environment, Settings } from '../../../common/lib/tracking'
 import { enterFullscreen, toggleFullscreen } from '../../../common/lib/fullscreen'
 import { Renderer, type Camera } from '../services/engine'
-import { createRunLogic, drillLabels, type Drill, type RunData } from '../services/logic'
+import { createRunLogic, drillLabels, type Drill, type RunData, type RunHooks } from '../services/logic'
+import { createStrafeBeeper } from '../services/cues'
 
 export type RunResult = {
   run: RunData
@@ -51,8 +52,11 @@ export function TrainerView({ drill, settings, degPerUnit, fovDeg, onFinish, onA
     const renderer = new Renderer(canvas, fovDeg ?? settings.fov)
     // Recoil drills put the back wall behind the target, up to 200 m out.
     const worldDepth = drill.kind === 'recoil' ? Math.max(40, drill.drill.rangeM + 20) : 40
+    const hooks: RunHooks = drill.kind === 'recoil' && drill.drill.mode === 'strafe' && drill.drill.strafeAudio
+      ? { strafeCue: createStrafeBeeper() }
+      : {}
     let seed = 0
-    let logic = createRunLogic(drill, seed, settings.duration)
+    let logic = createRunLogic(drill, seed, settings.duration, hooks)
     const cam: Camera = { yaw: 0, pitch: 0 }
 
     let phase: Phase = 'waiting'
@@ -66,9 +70,10 @@ export function TrainerView({ drill, settings, degPerUnit, fovDeg, onFinish, onA
     /** Fresh run state. Keeps pointer lock, so R restarts without another click. */
     const resetRun = (initial = false) => {
       seed = (Math.random() * 2 ** 32) >>> 0
-      logic = createRunLogic(drill, seed, settings.duration)
+      logic = createRunLogic(drill, seed, settings.duration, hooks)
       cam.yaw = logic.start.yaw
       cam.pitch = logic.start.pitch
+      cam.x = 0
       frames = 0
       liveS = 0
       startedAt = ''
@@ -203,6 +208,8 @@ export function TrainerView({ drill, settings, degPerUnit, fovDeg, onFinish, onA
     }
 
     const onKey = (e: KeyboardEvent) => {
+      // Always forwarded so a key held before GO counts; logic only logs while spraying.
+      if (!e.repeat) logic.key(e.code, true, performance.now() / 1000 - startT)
       if ((e.key === 'f' || e.key === 'F') && !e.repeat) {
         ignoreUnlockUntil = performance.now() + 1500
         void toggleFullscreen()
@@ -218,6 +225,10 @@ export function TrainerView({ drill, settings, degPerUnit, fovDeg, onFinish, onA
       }
     }
 
+    const onKeyUp = (e: KeyboardEvent) => {
+      logic.key(e.code, false, performance.now() / 1000 - startT)
+    }
+
     const onResize = () => renderer.resize()
 
     canvas.addEventListener('mousedown', onMouseDown)
@@ -225,6 +236,7 @@ export function TrainerView({ drill, settings, degPerUnit, fovDeg, onFinish, onA
     document.addEventListener('mousemove', onMouseMove)
     document.addEventListener('pointerlockchange', onLockChange)
     document.addEventListener('keydown', onKey)
+    document.addEventListener('keyup', onKeyUp)
     window.addEventListener('resize', onResize)
     raf = requestAnimationFrame(frame)
 
@@ -236,6 +248,7 @@ export function TrainerView({ drill, settings, degPerUnit, fovDeg, onFinish, onA
       document.removeEventListener('mousemove', onMouseMove)
       document.removeEventListener('pointerlockchange', onLockChange)
       document.removeEventListener('keydown', onKey)
+      document.removeEventListener('keyup', onKeyUp)
       window.removeEventListener('resize', onResize)
       if (document.pointerLockElement === canvas) document.exitPointerLock()
     }
@@ -259,7 +272,7 @@ export function TrainerView({ drill, settings, degPerUnit, fovDeg, onFinish, onA
             <div className="text-6xl font-extrabold [text-shadow:0_2px_20px_#000]">{overlay}</div>
             {overlay === 'Click to start' && (
               <p className="mt-3 text-sm text-ink-2">
-                {labels.name} · {drill.kind === 'recoil' ? `${drill.drill.sprays} sprays · hold left click · Tab guide` : `${settings.duration}s`} · R restart · F fullscreen · Esc to leave
+                {labels.name} · {drill.kind === 'recoil' ? `${drill.drill.sprays} sprays · hold left click${drill.drill.mode === 'strafe' ? ' · strafe A/D on the cues' : ''} · Tab guide` : `${settings.duration}s`} · R restart · F fullscreen · Esc to leave
               </p>
             )}
           </div>

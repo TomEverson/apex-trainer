@@ -2,16 +2,18 @@
  * First-person camera, projection and Canvas 2D renderer (SPEC-001).
  * Angles are degrees: yaw + = right, pitch + = up. Eye looks down +Z at yaw 0.
  */
-import { PILL } from '../../../common/lib/recoil'
+import { PILL, type StrafeSegment } from '../../../common/lib/recoil'
 
 const DEG = Math.PI / 180
 export const EYE = { x: 0, y: 1.4, z: 0 }
 
 type Vec3 = { x: number; y: number; z: number }
-export type Camera = { yaw: number; pitch: number }
+/** x: sideways offset of the eye from EYE, meters (the player strafing). */
+export type Camera = { yaw: number; pitch: number; x?: number }
 
-export function dirTo(p: Vec3) {
-  const dx = p.x - EYE.x, dy = p.y - EYE.y, dz = p.z - EYE.z
+/** Direction from the eye (shifted sideways by eyeX) to p. */
+export function dirTo(p: Vec3, eyeX = 0) {
+  const dx = p.x - EYE.x - eyeX, dy = p.y - EYE.y, dz = p.z - EYE.z
   return {
     yaw: Math.atan2(dx, dz) / DEG,
     pitch: Math.atan2(dy, Math.hypot(dx, dz)) / DEG,
@@ -23,7 +25,7 @@ export function dirTo(p: Vec3) {
 export function isOnTarget(cam: Camera, pos: Vec3, radius: number): boolean {
   const cy = Math.cos(cam.yaw * DEG), sy = Math.sin(cam.yaw * DEG)
   const cp = Math.cos(cam.pitch * DEG), sp = Math.sin(cam.pitch * DEG)
-  const dx = pos.x - EYE.x, dy = pos.y - EYE.y, dz = pos.z - EYE.z
+  const dx = pos.x - EYE.x - (cam.x ?? 0), dy = pos.y - EYE.y, dz = pos.z - EYE.z
   const dist = Math.hypot(dx, dy, dz)
   const cos = (sy * cp * dx + sp * dy + cy * cp * dz) / dist
   return Math.acos(Math.min(1, cos)) < Math.asin(Math.min(1, radius / dist))
@@ -59,7 +61,7 @@ export class Renderer {
   private toCamera(cam: Camera, p: Vec3): Vec3 {
     const cy = Math.cos(cam.yaw * DEG), sy = Math.sin(cam.yaw * DEG)
     const cp = Math.cos(cam.pitch * DEG), sp = Math.sin(cam.pitch * DEG)
-    const rx = p.x - EYE.x, ry = p.y - EYE.y, rz = p.z - EYE.z
+    const rx = p.x - EYE.x - (cam.x ?? 0), ry = p.y - EYE.y, rz = p.z - EYE.z
     const x1 = rx * cy - rz * sy
     const z1 = rx * sy + rz * cy
     return { x: x1, y: ry * cp - z1 * sp, z: ry * sp + z1 * cp }
@@ -203,6 +205,46 @@ export class Renderer {
     ctx.beginPath()
     ctx.arc(cx, cy, r, 0, Math.PI * 2)
     ctx.stroke()
+  }
+
+  /**
+   * Recoil Strafe cue, bottom centre: the spray's strafe phases as a bar
+   * (A = left, D = right), a playhead at `t` seconds since the trigger press
+   * (null = not firing), and the key to hold now, green when `dir` matches.
+   */
+  drawStrafeCue(timeline: StrafeSegment[], t: number | null, dir: number) {
+    const { ctx } = this
+    const total = timeline[timeline.length - 1].end
+    const w = Math.min(520, this.w - 80), h = 18
+    const x0 = (this.w - w) / 2, y0 = this.h - 90
+    const colour = (d: number) => (d < 0 ? '#3987e5' : d > 0 ? '#e0a84a' : '#4a505c')
+    const label = (d: number) => (d < 0 ? '◄ A' : d > 0 ? 'D ►' : '—')
+    ctx.font = '600 12px ui-sans-serif, system-ui, sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    for (const seg of timeline) {
+      const sx = x0 + (seg.start / total) * w, sw = ((seg.end - seg.start) / total) * w
+      ctx.fillStyle = colour(seg.dir)
+      ctx.globalAlpha = t === null || (t >= seg.start && t < seg.end) ? 0.95 : 0.4
+      ctx.fillRect(sx + 1, y0, Math.max(1, sw - 2), h)
+      ctx.globalAlpha = 1
+      if (sw > 34) {
+        ctx.fillStyle = '#0f1012'
+        ctx.fillText(label(seg.dir), sx + sw / 2, y0 + h / 2 + 1)
+      }
+    }
+    const at = t === null ? 0 : Math.min(t, total)
+    const px = x0 + (at / total) * w
+    ctx.fillStyle = '#f0efec'
+    ctx.fillRect(px - 1, y0 - 6, 2, h + 12)
+    // The key to hold now (before firing: the first one).
+    const cur = timeline.find((seg) => at < seg.end) ?? timeline[timeline.length - 1]
+    const want = t === null ? (timeline.find((seg) => seg.dir !== 0)?.dir ?? 0) : cur.dir
+    ctx.font = '800 34px ui-sans-serif, system-ui, sans-serif'
+    ctx.fillStyle = t === null ? 'rgba(240,239,236,0.55)' : dir === want ? '#3fb67a' : '#ff5d5d'
+    ctx.fillText(want < 0 ? '◄ A' : want > 0 ? 'D ►' : '—', this.w / 2, y0 - 30)
+    ctx.textAlign = 'start'
+    ctx.textBaseline = 'alphabetic'
   }
 
   /** Bullet impact: hit 1 on the target, 0 miss. */

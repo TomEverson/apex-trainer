@@ -2,8 +2,7 @@
  * Spray guide (SPEC-006): turns a drill's pattern into the mouse movement that
  * cancels it, split into a few steps with plain-language instructions. Pure.
  */
-import { expandPattern, type RecoilDrill } from '../../../common/lib/recoil'
-import { shotTimes } from './weapons'
+import { expandPattern, shotTimes, strafeTimeline, type RecoilDrill, type StrafeSegment } from '../../../common/lib/recoil'
 
 /** Sideways movement below this (degrees per step) is called "straight down". */
 const SIDE_MIN_DEG = 0.25
@@ -26,6 +25,8 @@ export type SprayGuide = {
   marks: number[]
   steps: GuideStep[]
   tips: string[]
+  /** Recoil Strafe only: the A/D phases in time. */
+  strafe: StrafeSegment[]
 }
 
 const strength = (degPerS: number) => (degPerS >= 6 ? 'hard' : degPerS >= 3 ? 'steadily' : 'gently')
@@ -52,6 +53,19 @@ export function sprayGuide(d: RecoilDrill): SprayGuide {
     a = b
   }
 
+  const strafe = d.mode === 'strafe' ? strafeTimeline(d.weapon, n) : []
+  if (strafe.length) {
+    return {
+      pattern, marks, steps, strafe,
+      tips: [
+        'Keep pulling down with the mouse — the strafe handles the sideways drift, not the climb. Hold the right key and the spray goes straight up; late or wrong and it drifts sideways.',
+        'Strafe the way the spray is drifting, and switch on the beep: left ear = A, right ear = D.',
+        'Your strafe slides the target across the screen (more the closer it is) — track it with the mouse while you pull down.',
+        'Tap the new key as you release the old one; never hold both (they cancel out).',
+      ],
+    }
+  }
+
   const rates = steps.map((s) => s.downDeg / s.seconds)
   const front = rates[0] >= Math.max(...rates) * 0.9
   const total = pattern[n - 1][1]
@@ -66,5 +80,5 @@ export function sprayGuide(d: RecoilDrill): SprayGuide {
       : 'Keep the wrist relaxed and pull with the forearm; use fingertips only for the small sideways drifts.',
     'Watch the target, not the crosshair. If hits drift high late in the spray, pull harder earlier rather than more at the end.',
   ]
-  return { pattern, marks, steps, tips }
+  return { pattern, marks, steps, tips, strafe }
 }

@@ -81,6 +81,29 @@ The results page plots every bullet, the average spray and the no-pull pattern o
 
 **History.** The History tab switches between Pure Aim and Recoil Control. Recoil has one section per drill variant: a hit-rate chart and the last 10 runs (hit, vertical/horizontal compensation, error, biases, early/late error, first bullet, consistency, °/count). "Copy LLM analysis prompt" copies the report for the view you're on (`buildRecoilReport` for recoil).
 
+## Recoil Strafe (A/D)
+
+The Recoil Control page has two categories: **Recoil Pure** (mouse only) and **Recoil Strafe** (`prefs.mode = 'strafe'`, drill id suffix `-ad`).
+
+**Data.** The strafe patterns are from [apexrecoilstrafing.com](https://www.apexrecoilstrafing.com/) ("up to date with Season 28.1"), read from the site's pattern data on 2026-10-23 (`strafes.ts`). They are ahn99's patterns as kept current by the site; ahn99's own doc (last updated 2025-09-06) is older, and differs for the Alternator and Prowler burst. Each phase is `[direction, ms]` from the trigger press; 'shoot' steps (e.g. the Havoc's 350 ms windup) become 'none'. `strafeTimeline` (in `common/lib/recoil.ts`) runs the phases back to back, cuts them off when the magazine empties, stretches the last over a longer one, and finds the bullets in each phase with the shared `shotTimes` for the guide. The site's total durations agree with our fire rates and purple magazines, e.g. R-301 2.21 s = 31 rounds at 810 rpm; the L-STAR's 2.70 s means 40 shots at ~867 rpm. Havoc's windup is 0.35 s. The patterns match the measured drift: strafe the way the spray drifts.
+
+**Drill.** A cue bar at the bottom shows the phases, a playhead, and the key to hold now (green when right). Optional beeps play on each switch, panned and pitched by side.
+
+**Strafe effect ("recoil smoothing").** Apex reduces recoil while your character or crosshair moves horizontally, a global engine behaviour the community calls recoil smoothing. The most careful source (apexaimtrainer.com) says it "cancels most horizontal drift and reduces vertical climb", and that no datamine or capture tool has ever measured either amount. The trainer models only the part the sources agree on: a shot fired while holding the key the pattern calls for gets **no sideways kick**. No key or the wrong key leaves all of it. **Vertical climb is left at 100%**: the game reduces it too, but the amount is unknown, so in game you may need to pull a little less. Stored `oYaw` stays the full pattern, so `horizComp` shows how much the strafe plus the mouse took out.
+
+**Movement (option B, real).** A/D move the player at the weapon class's ADS strafe speed (`ADS_STRAFE_SPEED`). Apex walks at 173.5 hu/s with a weapon out (1 hu ≈ 1 inch) times the class's ADS move multiplier (AR 0.5, SMG 0.75, LMG 0.4; Apex Legends Wiki, matching the Apex Movement wiki's measured 86.75 / 130.12 hu/s). That gives AR 2.20, SMG 3.31 and LMG 1.76 m/s. Acceleration was **measured in game** from two Firing Range clips with `cl_showpos` (2026-10-23; ~28 fps Flatline, ~20 fps Prowler). Every frame's velocity readout was decoded with each frame's exact timestamp:
+
+| | AR (Flatline) | SMG (Prowler) |
+|---|---|---|
+| Steady ADS speed | 86.75 hu/s (= wiki) | 130.12 hu/s (= wiki) |
+| Key held: standing → full speed | 0 → 35.14 → 86.75 over **~0.04 s** | 0 → 130.12 within one **0.038 s** frame |
+| Key held: A↔D reversal | 2,022 · 2,493 hu/s² (≈ 86.75 / 0.04 s) | 2,446 · 2,771 · 2,967 hu/s² (~15% under 130.12 / 0.04 s; 20 fps clip) |
+| No key: coast to a stop | ≥ ~1,000 (2 frames) | **1,260 hu/s²** (1,248 / 1,240 / 1,317 / 1,250, from 173.5 hu/s hip-fire) |
+
+Both measured classes reach full speed from standing in ~0.04 s, so `STRAFE_REACH_S = 0.04` for every class and `STRAFE_ACCEL` = top speed ÷ 0.04, as in Source-style movement (AR 2,169, SMG 3,253, LMG 1,735 hu/s²). A full reversal takes 0.08 s, and letting go (no key or both, `STRAFE_COAST_DECEL`) stops you in ~0.07 s (AR) / ~0.10 s (SMG). The LMG was not measured; it follows the same 0.04 s. At this frame rate the values are good to roughly ±15%. Movement stays within ±6 m. The target stays fixed in the world, so the strafe slides it across the screen (e.g. ~6°/s for an AR at 20 m) and it has to be tracked, as in game. Option A (target carried along with the player) was tried and dropped: the target visibly strafed with you.
+
+**Log & score.** `shots.strafe` holds the trigger press and spray end per spray, plus every A/D direction change during a spray. `computeStrafeSummary` samples every 5 ms and reports: timing (share of time on the expected key), wrong key, no key, per-phase timing, and switches. A switch counts if made from 250 ms early to 400 ms late; anything later is missed. Median and mean |lag| are reported too. Tips: strafe-wrong, strafe-missed, strafe-late, strafe-early.
+
 ## Data Model / Schema
 
 Migration `0006_recoil_session.sql`: `recoil_session` (one row per drill; key metrics as columns, `drill_json` holds the weapon and the exact pattern played, `drill_id` is the variant `weapon@range-x{zoom}-m{mag}-b{barrel}[-strafe]`) and `recoil_shots` (the per-bullet log). Recoil prefs live in `Settings.recoil` (localStorage). `deg_per_count` is stored as played (after the ADS multiplier and optic zoom), and `fov` is the zoomed FOV.

@@ -12,6 +12,7 @@ const METRIC_GUIDE = `Metric definitions (angles in degrees, bullet direction mi
 - first: error of each spray's first bullet (aim before firing, not recoil).
 - consist: how differently the sprays went, bullet for bullet (lower = the same pull every time).
 - °/count: degrees per mouse count while aiming (after ADS multiplier and optic zoom).
+- Recoil Strafe drills ("A/D strafe" in the name) also score strafing with A/D to a pro's per-weapon timing (ahn99): a/d = share of time on the right key, lag = median switch lag in ms (+ = late), missed = switches not made within 0.4 s. Strafing doesn't change the simulated bullets; it trains the timing.
 - Each run is 5 full-magazine sprays. Patterns are Firing Range captures; "pattern" says how current the capture is (measured / outdated / estimate).`
 
 const p = (v: number | null | undefined) => (v == null ? '-' : (v * 100).toFixed(0))
@@ -55,13 +56,14 @@ export function buildRecoilReport(sessions: RecoilSessionRow[], { perDrill = 15 
     if (topTips.length) lines.push(`Auto-detected issues (count of runs): ${topTips.join(', ')}`)
     lines.push(
       '',
-      '| date | °/count | hit% | vComp | hComp | err | vBias | hBias | early/mid/late err | first | consist |',
-      '|---|---|---|---|---|---|---|---|---|---|---|',
+      '| date | °/count | hit% | vComp | hComp | err | vBias | hBias | early/mid/late err | first | consist | a/d | lag | missed |',
+      '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|',
     )
     for (const r of group.slice(-perDrill)) {
       const s = r.summary
+      const st = s.strafe
       lines.push(
-        `| ${r.startedAt.slice(5, 16).replace('T', ' ')} | ${f(r.degPerCount, 4)} | ${p(s.hitRate)} | ${p(s.vertComp)} | ${p(s.horizComp)} | ${f(s.meanErrDeg)} | ${f(s.vertBiasDeg)} | ${f(s.horizBiasDeg)} | ${f(s.phases.early.meanErrDeg)}/${f(s.phases.mid.meanErrDeg)}/${f(s.phases.late.meanErrDeg)} | ${f(s.firstShotErrDeg)} | ${f(s.consistencyDeg)} |`,
+        `| ${r.startedAt.slice(5, 16).replace('T', ' ')} | ${f(r.degPerCount, 4)} | ${p(s.hitRate)} | ${p(s.vertComp)} | ${p(s.horizComp)} | ${f(s.meanErrDeg)} | ${f(s.vertBiasDeg)} | ${f(s.horizBiasDeg)} | ${f(s.phases.early.meanErrDeg)}/${f(s.phases.mid.meanErrDeg)}/${f(s.phases.late.meanErrDeg)} | ${f(s.firstShotErrDeg)} | ${f(s.consistencyDeg)} | ${p(st?.timing)} | ${f(st?.medianLagMs, 0)} | ${st ? `${st.missed}/${st.switches}` : '-'} |`,
       )
     }
     lines.push('')

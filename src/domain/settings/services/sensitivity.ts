@@ -49,7 +49,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showHud: true,
   autoFullscreen: true,
   countdownS: 2,
-  recoil: { rangeM: 20, target: 'static', magTier: 2, barrelTier: 0, sprays: 5, adsScale: 1, zoom: 1 },
+  recoil: { rangeM: 20, target: 'static', magTier: 2, barrelTier: 0, sprays: 5, adsScale: 1, zoom: 1, mode: 'pure', strafeAudio: true },
 }
 
 /** Target speed multipliers offered in Settings (and as goal variants). */

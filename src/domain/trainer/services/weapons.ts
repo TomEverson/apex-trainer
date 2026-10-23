@@ -7,7 +7,9 @@
 // to S30 Split 2 (2026-09-15) and match the captures' shot timing. Runs store
 // the pattern they used, so a recapture never rewrites history.
 import { expandPattern, type RecoilDrill, type RecoilPrefs, type Weapon } from '../../../common/lib/recoil'
+export { shotGap, shotTimes, strafeTimeline } from '../../../common/lib/recoil'
 import * as P from './patterns'
+import { STRAFES } from './strafes'
 
 const CAP_2021 = 'apex-recoil capture 2021 (S8–S11)'
 const CAP_2024 = 'apex-recoil capture 2024-09 (S22)'
@@ -15,22 +17,22 @@ const ESTIMATE = 'estimate-s30'
 const OLD = 'Captured in 2021 and marked out of date by its source; the gun may have been retuned since.'
 const JITTER = 0.05
 
-export const WEAPONS: Weapon[] = [
+const BASE: Weapon[] = [
   // ── Assault rifles ──
   {
     id: 'r-301', name: 'R-301 Carbine', class: 'ar', ammo: 'light', carePackage: false,
-    rpm: 810, mags: [18, 20, 25, 28], barrel: true, jitterDeg: JITTER,
+    rpm: 810, mags: [21, 23, 28, 31], barrel: true, jitterDeg: JITTER,
     pattern: P.R301, source: CAP_2024, confidence: 'measured',
   },
   {
     id: 'flatline', name: 'VK-47 Flatline', class: 'ar', ammo: 'heavy', carePackage: false,
-    rpm: 600, mags: [20, 25, 28, 30], barrel: true, jitterDeg: JITTER,
+    rpm: 600, mags: [19, 23, 27, 29], barrel: true, jitterDeg: JITTER,
     pattern: P.FLATLINE, source: CAP_2024, confidence: 'measured',
   },
   {
     id: 'havoc', name: 'Havoc', class: 'ar', ammo: 'energy', carePackage: false,
-    // Turbocharger removed in S22 Split 2, so the windup applies. Captured with it; the pattern is the same.
-    rpm: 660, windupS: 0.27, mags: [25, 28, 30, 32], barrel: true, jitterDeg: JITTER,
+    // Turbocharger removed in S22 Split 2, so the 0.35 s windup (ahn99) applies. Captured with it; the pattern is the same.
+    rpm: 660, windupS: 0.35, mags: [25, 28, 30, 32], barrel: true, jitterDeg: JITTER,
     pattern: P.HAVOC, source: CAP_2021, confidence: 'outdated', patternNote: OLD,
   },
   {
@@ -42,7 +44,8 @@ export const WEAPONS: Weapon[] = [
   },
   {
     id: 'nemesis', name: 'Nemesis Burst AR', class: 'ar', ammo: 'energy', carePackage: false,
-    rpm: 1100, burst: { size: 4, delayS: 0.3 }, mags: [20, 24, 27, 30], barrel: false, jitterDeg: JITTER,
+    // Fully charged: one 4-round burst every 0.33 s (apexrecoilstrafing.com's charged pattern).
+    rpm: 1100, burst: { size: 4, delayS: 0.166 }, mags: [20, 24, 27, 32], barrel: false, jitterDeg: JITTER,
     pattern: [[0, 0, 0], [8, 0.3, 1.6], [16, 0.5, 2.6], [30, 0.2, 3.6]],
     source: ESTIMATE, confidence: 'estimate', patternNote: 'No capture exists. Shape and size are guesses.',
   },
@@ -74,14 +77,14 @@ export const WEAPONS: Weapon[] = [
   },
   {
     id: 'prowler', name: 'Prowler Burst PDW', class: 'smg', ammo: 'heavy', carePackage: false,
-    rpm: 1200, burst: { size: 5, delayS: 0.24 }, mags: [20, 25, 28, 30], barrel: false, jitterDeg: JITTER,
+    rpm: 1200, burst: { size: 5, delayS: 0.24 }, mags: [20, 25, 28, 35], barrel: false, jitterDeg: JITTER,
     pattern: [[0, 0, 0], [10, 0.4, 2.4], [20, 0.2, 3.6], [30, -0.2, 4.4]],
     source: ESTIMATE, confidence: 'estimate', patternNote: 'No capture of burst mode. Shape and size are guesses.',
   },
   {
     // Selectfire Receiver: the same gun in full-auto. Separate id so its stats never mix with burst.
     id: 'prowler-auto', name: 'Prowler PDW (Full Auto)', class: 'smg', ammo: 'heavy', carePackage: false,
-    rpm: 800, mags: [20, 25, 28, 30], barrel: false, jitterDeg: JITTER,
+    rpm: 800, mags: [20, 25, 28, 35], barrel: false, jitterDeg: JITTER,
     pattern: P.PROWLER_AUTO, source: CAP_2021, confidence: 'outdated',
     patternNote: 'Captured in 2021; Prowler recoil was improved in the S28 mid-season patch, so the live gun kicks less.',
   },
@@ -95,8 +98,10 @@ export const WEAPONS: Weapon[] = [
   {
     id: 'l-star', name: 'L-STAR EMG', class: 'lmg', ammo: 'energy', carePackage: true,
     // Care Package since S29; no magazine, so every tier is shots until overheat.
-    rpm: 600, mags: [24, 24, 24, 24], barrel: false, jitterDeg: JITTER,
-    pattern: P.LSTAR, source: CAP_2021, confidence: 'outdated', patternNote: OLD,
+    // apexrecoilstrafing.com's L-STAR pattern lasts 2.70 s, i.e. 40 shots at ~867 rpm. The 2021 capture covers 28; the rest continues its last step.
+    rpm: 867, mags: [40, 40, 40, 40], barrel: false, jitterDeg: JITTER,
+    pattern: P.LSTAR, source: CAP_2021, confidence: 'outdated',
+    patternNote: 'Captured in 2021 (28 shots) and marked out of date by its source; shots 29–40 continue its last step.',
   },
   {
     id: 'spitfire', name: 'M600 Spitfire', class: 'lmg', ammo: 'light', carePackage: false,
@@ -105,10 +110,12 @@ export const WEAPONS: Weapon[] = [
   },
   {
     id: 'rampage', name: 'Rampage LMG', class: 'lmg', ammo: 'heavy', carePackage: false,
-    rpm: 300, mags: [26, 30, 34, 38], barrel: true, jitterDeg: JITTER,
+    rpm: 300, mags: [28, 32, 34, 40], barrel: true, jitterDeg: JITTER,
     pattern: P.RAMPAGE, source: CAP_2021, confidence: 'outdated', patternNote: OLD,
   },
 ]
+
+export const WEAPONS: Weapon[] = BASE.map((w) => ({ ...w, strafe: STRAFES[w.id] }))
 
 export const CLASS_LABELS = { ar: 'Assault rifles', smg: 'SMGs', lmg: 'LMGs' } as const
 export const TIER_LABELS = ['None', 'White', 'Blue', 'Purple'] as const
@@ -129,40 +136,21 @@ export function buildDrill(weapon: Weapon, prefs: RecoilPrefs): RecoilDrill {
   const barrelTier = weapon.barrel ? prefs.barrelTier : 0
   // The L-STAR has one "magazine"; don't split its stats by mag tier.
   const magTier = new Set(weapon.mags).size === 1 ? 0 : prefs.magTier
-  const strafe = prefs.target === 'strafe'
+  const moving = prefs.target === 'strafe'
+  // Recoil Strafe needs the weapon's A/D pattern; without one it's a pure drill.
+  const mode = prefs.mode === 'strafe' && weapon.strafe ? 'strafe' : 'pure'
   return {
     ...prefs,
+    mode,
     sprays: SPRAYS_PER_RUN,
     barrelTier,
     magTier,
-    id: `${weapon.id}@${prefs.rangeM}m-x${prefs.zoom}-m${magTier}-b${barrelTier}${strafe ? '-strafe' : ''}`,
-    name: `${weapon.name} · ${prefs.rangeM} m · ${prefs.zoom}x${strafe ? ' · strafing' : ''}`,
+    id: `${weapon.id}@${prefs.rangeM}m-x${prefs.zoom}-m${magTier}-b${barrelTier}${moving ? '-strafe' : ''}${mode === 'strafe' ? '-ad' : ''}`,
+    name: `${weapon.name} · ${prefs.rangeM} m · ${prefs.zoom}x${moving ? ' · moving target' : ''}${mode === 'strafe' ? ' · A/D strafe' : ''}`,
     weapon,
     magSize: weapon.mags[magTier],
     kickScale: BARREL_SCALE[barrelTier],
   }
-}
-
-/**
- * Seconds until the next shot, after `fired` shots of the current spray with
- * the trigger held for `heldS`: the burst pause after a full burst, else the
- * fire rate (ramping up for spin-up weapons).
- */
-export function shotGap(w: Weapon, fired: number, heldS: number): number {
-  if (w.burst && fired % w.burst.size === 0) return w.burst.delayS
-  const rpm = w.spinUp ? w.spinUp.fromRpm + (w.rpm - w.spinUp.fromRpm) * Math.min(1, heldS / w.spinUp.seconds) : w.rpm
-  return 60 / rpm
-}
-
-/** Time of each shot from the trigger press, seconds (for the spray guide). */
-export function shotTimes(w: Weapon, n: number): number[] {
-  const times: number[] = []
-  let t = w.windupS ?? 0
-  for (let i = 0; i < n; i++) {
-    times.push(t)
-    t += shotGap(w, i + 1, t)
-  }
-  return times
 }
 
 /**

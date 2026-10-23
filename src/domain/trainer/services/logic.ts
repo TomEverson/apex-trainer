@@ -4,10 +4,9 @@
  * for one run.
  */
 import { emptySamples, type Samples, type Scenario, type Shots } from '../../../common/lib/tracking'
-import { PILL, emptyRecoilShots, expandPattern, type RecoilDrill, type RecoilShots } from '../../../common/lib/recoil'
+import { ADS_STRAFE_SPEED, PILL, STRAFE_ACCEL, STRAFE_COAST_DECEL, emptyRecoilShots, expandPattern, shotGap, strafeTimeline, type RecoilDrill, type RecoilShots } from '../../../common/lib/recoil'
 import { EYE, Renderer, dirTo, isOnTarget, type Camera } from './engine'
 import { createMover, mulberry32 } from './mover'
-import { shotGap } from './weapons'
 
 const PHYSICS_STEP = 1 / 480
 const DEG = Math.PI / 180
@@ -29,6 +28,8 @@ export type RunLogic = {
   click(elapsed: number, cam: Camera): void
   /** Left button pressed / released while live (held-trigger weapons). */
   trigger(down: boolean, elapsed: number): void
+  /** Physical key (KeyboardEvent.code) pressed / released while live. */
+  key(code: string, down: boolean, elapsed: number): void
   draw(r: Renderer, cam: Camera, live: boolean): void
   hud(): string
   /** HUD progress value: seconds left, or spray n of N. */
@@ -43,18 +44,25 @@ export function drillLabels(d: Drill) {
   return { name: d.scenario.name, score: d.scenario.mode === 'tiles' ? 'kills' : 'on target', progress: 'time' }
 }
 
-export function createRunLogic(d: Drill, seed: number, durationS: number): RunLogic {
-  if (d.kind === 'recoil') return createRecoilLogic(d.drill, seed)
+/** Side effects a run may ask the shell for. */
+export type RunHooks = {
+  /** Recoil Strafe: a new strafe phase starts (-1 left, 0 none, 1 right). */
+  strafeCue?: (dir: number) => void
+}
+
+export function createRunLogic(d: Drill, seed: number, durationS: number, hooks: RunHooks = {}): RunLogic {
+  if (d.kind === 'recoil') return createRecoilLogic(d.drill, seed, hooks)
   const logic = d.scenario.mode === 'tiles' ? createTileLogic(d.scenario, seed) : createTrackingLogic(d.scenario, seed)
   return {
     ...logic,
     trigger() {},
+    key() {},
     progress: (elapsed) => Math.max(0, durationS - elapsed).toFixed(1),
     done: (elapsed) => elapsed >= durationS,
   }
 }
 
-type TimedLogic = Omit<RunLogic, 'trigger' | 'progress' | 'done'>
+type TimedLogic = Omit<RunLogic, 'trigger' | 'key' | 'progress' | 'done'>
 
 const angRadius = (radius: number, dist: number) => Math.asin(Math.min(1, radius / dist)) / DEG
 
@@ -182,6 +190,13 @@ function createTileLogic(sc: Scenario, seed: number): TimedLogic {
 
 /** Pause after a spray (stands in for the reload) before the next one can start. */
 const RELOAD_S = 1
+/**
+ * Recoil Strafe movement uses measured Apex values (common/lib/recoil.ts): the
+ * class's ADS strafe speed, its acceleration while a key is held
+ * (STRAFE_ACCEL), and a slower coast to a stop with no key (STRAFE_COAST_DECEL).
+ * The player stays within ±STRAFE_LIMIT_M of the start.
+ */
+const STRAFE_LIMIT_M = 6
 /** Keep the last spray's impacts on screen briefly before the results. */
 const END_HOLD_S = 0.6
 /** A shot's kick is eased in over this long (capped below the shot gap). */
@@ -195,7 +210,7 @@ function hitPill(cam: Camera, base: Vec3): { hit: number; p: Vec3 | null } {
   const dir = { x: Math.sin(cam.yaw * DEG) * cp, y: Math.sin(cam.pitch * DEG), z: Math.cos(cam.yaw * DEG) * cp }
   if (dir.z <= 1e-6) return { hit: 0, p: null }
   const s = (base.z - EYE.z) / dir.z
-  const p = { x: EYE.x + dir.x * s, y: EYE.y + dir.y * s, z: base.z }
+  const p = { x: EYE.x + (cam.x ?? 0) + dir.x * s, y: EYE.y + dir.y * s, z: base.z }
   // Distance to the pill's spine (the segment between its two cap centres).
   const spineY = Math.max(PILL.radius, Math.min(PILL.height - PILL.radius, p.y))
   return { hit: Math.hypot(p.x - base.x, p.y - spineY) <= PILL.radius ? 1 : 0, p }
@@ -206,8 +221,16 @@ function hitPill(cam: Camera, base: Vec3): { hit: number; p: Vec3 | null } {
  * legend-sized pill. Each shot kicks the camera toward the next bullet's pattern offset,
  * so with no mouse input the bullets trace the weapon's pattern exactly.
  * Releasing or emptying the magazine ends the spray.
+ *
+ * Recoil Strafe also logs A/D while spraying and cues each strafe phase. A/D
+ * move the player at the class's real ADS speed while the target stays put,
+ * so it slides on screen and has to be tracked (SPEC-006 option B). Recoil
+ * smoothing, as far as it is documented: a shot fired while holding the key
+ * the pattern calls for gets no sideways kick; wrong or no key leaves all of
+ * it. The vertical climb is unchanged — the game reduces it too, but by an
+ * amount nobody has measured.
  */
-function createRecoilLogic(d: RecoilDrill, seed: number): RunLogic {
+function createRecoilLogic(d: RecoilDrill, seed: number, hooks: RunHooks): RunLogic {
   const w = d.weapon
   const pattern = expandPattern(w.pattern, d.magSize).map(([y, p]) => [y * d.kickScale, p * d.kickScale])
   const jitterRand = mulberry32(seed ^ 0x9e3779b9)
@@ -218,18 +241,45 @@ function createRecoilLogic(d: RecoilDrill, seed: number): RunLogic {
         speed: [2.5, 3.5], interval: [0.4, 1.1], box: { x: 3, y: [PILL.centreY, PILL.centreY], z: 0 },
       }, mulberry32(seed))
     : null
-  // Aim point: the pill's centre.
+  // Aim point: the pill's centre, fixed in the world (or moving on its own).
   const centre = mover ? mover.pos : { x: 0, y: PILL.centreY, z: EYE.z + d.rangeM }
   const start = dirTo(centre)
+  const target = () => centre
+  const strafeSpeed = ADS_STRAFE_SPEED[w.class]
+  const strafeAccel = STRAFE_ACCEL[w.class]
   const shots = emptyRecoilShots()
 
   let physicsAcc = 0
   let ammo = d.magSize, idx = 0, spray = 0, hits = 0
   let held = false, reloading = false, reloadUntil = 0
-  let sprayStart = 0, nextShotT = 0, finishedAt = Infinity
+  let sprayStart = 0, nextShotT = 0, finishedAt = Infinity, lastElapsed = 0
   let off = [0, 0]
   const kick = { yaw: 0, pitch: 0, left: 0 }
+  /** Impacts relative to the target, so they stay on a moving target. */
   let holes: { p: Vec3; hit: number }[] = []
+
+  // Recoil Strafe: the weapon's strafe phases in seconds from the trigger press.
+  const timeline = d.mode === 'strafe' ? strafeTimeline(w, d.magSize) : []
+  const log: NonNullable<RecoilShots['strafe']> | null = timeline.length
+    ? { pressT: [], endT: [], t: [], spray: [], dir: [] }
+    : null
+  const keys = { left: false, right: false }
+  let dir = 0, cuedPhase = -1
+  // The player's sideways position and speed (Recoil Strafe only).
+  let eyeX = 0, eyeV = 0
+  const logDir = (t: number) => {
+    if (!log || !held) return
+    log.t.push(t)
+    log.spray.push(spray)
+    log.dir.push(dir)
+  }
+  /** Timeline index at seconds since the press, or -1 past the end. */
+  const phaseAt = (s: number) => timeline.findIndex((p) => s < p.end)
+  /** True when the key held at run time t is the one the pattern calls for. */
+  const strafeCancels = (t: number) => {
+    const p = phaseAt(t - sprayStart)
+    return p >= 0 && timeline[p].dir !== 0 && dir === timeline[p].dir
+  }
 
   const applyKick = (cam: Camera, frac: number) => {
     const dy = kick.yaw * frac, dp = kick.pitch * frac
@@ -240,6 +290,7 @@ function createRecoilLogic(d: RecoilDrill, seed: number): RunLogic {
   }
 
   const endSpray = (t: number) => {
+    log?.endT.push(t)
     held = false
     spray++
     reloading = true
@@ -252,8 +303,9 @@ function createRecoilLogic(d: RecoilDrill, seed: number): RunLogic {
     // mouse reproduces the pattern exactly.
     applyKick(cam, 1)
     kick.left = 0
-    const aim = dirTo(centre)
-    const { hit, p } = hitPill(cam, { x: centre.x, y: 0, z: centre.z })
+    const tgt = target()
+    const aim = dirTo(tgt, eyeX)
+    const { hit, p } = hitPill(cam, { x: tgt.x, y: 0, z: tgt.z })
     shots.t.push(t)
     shots.spray.push(spray)
     shots.idx.push(idx)
@@ -265,13 +317,14 @@ function createRecoilLogic(d: RecoilDrill, seed: number): RunLogic {
     shots.oPitch.push(off[1])
     shots.hit.push(hit)
     if (hit) hits++
-    if (p) holes.push({ p, hit })
+    if (p) holes.push({ p: { ...p, x: p.x - tgt.x }, hit })
     ammo--
     idx++
     if (ammo === 0) return endSpray(t)
     const gap = shotGap(w, idx, t - sprayStart)
     const next = [pattern[idx][0] + jitter(), pattern[idx][1] + jitter()]
-    kick.yaw += next[0] - off[0]
+    // Stored offsets stay the full pattern, so horizontal compensation shows how much the strafe took out.
+    if (!strafeCancels(t)) kick.yaw += next[0] - off[0]
     kick.pitch += next[1] - off[1]
     kick.left = Math.min(KICK_S, gap * 0.6)
     off = next
@@ -281,13 +334,20 @@ function createRecoilLogic(d: RecoilDrill, seed: number): RunLogic {
   return {
     start: { yaw: start.yaw, pitch: start.pitch },
     frame(elapsed, dt, cam) {
-      if (mover) {
-        physicsAcc += dt
-        while (physicsAcc >= PHYSICS_STEP) {
-          mover.step(PHYSICS_STEP)
-          physicsAcc -= PHYSICS_STEP
+      lastElapsed = elapsed
+      physicsAcc += dt
+      while (physicsAcc >= PHYSICS_STEP) {
+        mover?.step(PHYSICS_STEP)
+        if (timeline.length) {
+          // A key held accelerates (or reverses) toward strafe speed; no key coasts to a stop, slower.
+          const want = dir * strafeSpeed, maxDv = (dir ? strafeAccel : STRAFE_COAST_DECEL) * PHYSICS_STEP
+          eyeV += Math.max(-maxDv, Math.min(maxDv, want - eyeV))
+          eyeX += eyeV * PHYSICS_STEP
+          if (Math.abs(eyeX) > STRAFE_LIMIT_M) { eyeX = Math.sign(eyeX) * STRAFE_LIMIT_M; eyeV = 0 }
         }
+        physicsAcc -= PHYSICS_STEP
       }
+      cam.x = eyeX
       if (kick.left > 0) {
         applyKick(cam, Math.min(1, dt / kick.left))
         kick.left -= dt
@@ -299,6 +359,13 @@ function createRecoilLogic(d: RecoilDrill, seed: number): RunLogic {
         off = [0, 0]
         holes = []
       }
+      if (held && timeline.length) {
+        const p = phaseAt(elapsed - sprayStart)
+        if (p !== cuedPhase) {
+          cuedPhase = p
+          if (p >= 0 && timeline[p].dir !== 0) hooks.strafeCue?.(timeline[p].dir)
+        }
+      }
       while (held && ammo > 0 && nextShotT <= elapsed) fire(nextShotT, cam)
     },
     click() {},
@@ -308,20 +375,40 @@ function createRecoilLogic(d: RecoilDrill, seed: number): RunLogic {
         held = true
         sprayStart = elapsed
         nextShotT = elapsed + (w.windupS ?? 0)
+        cuedPhase = -1
+        log?.pressT.push(elapsed)
+        logDir(elapsed)
       } else if (held) {
-        held = false
         // Letting go mid-magazine ends the spray; the next press starts a fresh pattern.
-        if (idx > 0) endSpray(elapsed)
+        if (idx > 0) return endSpray(elapsed)
+        held = false
+        // Released during a windup: nothing was fired, so forget this press.
+        if (log) {
+          log.pressT.pop()
+          while (log.spray.at(-1) === spray) { log.t.pop(); log.spray.pop(); log.dir.pop() }
+        }
       }
     },
-    draw(r, cam) {
-      r.drawPill(cam, { x: centre.x, y: 0, z: centre.z })
-      for (const h of holes) r.drawImpact(cam, h.p, h.hit)
+    key(code, down, elapsed) {
+      if (code === 'KeyA') keys.left = down
+      else if (code === 'KeyD') keys.right = down
+      else return
+      // Both held cancel out, as in game.
+      const next = (keys.right ? 1 : 0) - (keys.left ? 1 : 0)
+      if (next === dir) return
+      dir = next
+      logDir(elapsed)
+    },
+    draw(r, cam, live) {
+      const tgt = target()
+      r.drawPill(cam, { x: tgt.x, y: 0, z: tgt.z })
+      for (const h of holes) r.drawImpact(cam, { ...h.p, x: h.p.x + tgt.x }, h.hit)
       if (d.zoom > 1) r.drawScope()
+      if (timeline.length) r.drawStrafeCue(timeline, live && held ? lastElapsed - sprayStart : null, dir)
     },
     hud: () => `${shots.t.length ? ((hits / shots.t.length) * 100).toFixed(1) : '0.0'}%`,
     progress: () => (reloading && spray < d.sprays ? 'reload' : `${Math.min(spray + 1, d.sprays)}/${d.sprays}`),
     done: (elapsed) => elapsed >= finishedAt + END_HOLD_S,
-    data: () => ({ kind: 'recoil', shots }),
+    data: () => ({ kind: 'recoil', shots: log ? { ...shots, strafe: log } : shots }),
   }
 }

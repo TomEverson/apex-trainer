@@ -70,7 +70,7 @@ export const settingsSchema = z.object({
   /** Seconds of countdown between locking the mouse and the run going live. */
   countdownS: z.number().min(0).max(10).default(2),
   /** Recoil Control drill options (SPEC-006). */
-  recoil: recoilPrefsSchema.default({ rangeM: 20, target: 'static', magTier: 2, barrelTier: 0, sprays: 5, adsScale: 1, zoom: 1 }),
+  recoil: recoilPrefsSchema.default({ rangeM: 20, target: 'static', magTier: 2, barrelTier: 0, sprays: 5, adsScale: 1, zoom: 1, mode: 'pure', strafeAudio: true }),
 })
 export type Settings = z.infer<typeof settingsSchema>
 
@@ -188,6 +188,7 @@ export type TipKey =
   | 'asymmetry' | 'vertical' | 'jitter' | 'fatigue' | 'speed' | 'reacquire' | 'solid'
   | 'click-accuracy' | 'flick-overshoot' | 'flick-undershoot' | 'flick-distance'
   | 'under-pull' | 'over-pull' | 'late-drift' | 'horizontal' | 'first-shot' | 'inconsistent'
+  | 'strafe-late' | 'strafe-early' | 'strafe-wrong' | 'strafe-missed'
 export type Tip = { key: TipKey; text: string }
 
 /** A stored run as returned to the client (no samples). */

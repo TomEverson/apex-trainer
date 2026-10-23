@@ -24,16 +24,31 @@ function RecoilRoute() {
   const prefs = settings.recoil
   const set = (patch: Partial<RecoilPrefs>) => update({ recoil: { ...prefs, ...patch } })
 
+  const strafe = prefs.mode === 'strafe'
+  const kbd = 'rounded bg-surface-2 px-1.5'
+
   return (
     <>
-      <p className="mt-6 mb-4 text-ink-2">
-        Pick a weapon. Each run is {SPRAYS_PER_RUN} sprays: hold left click to empty a full magazine at the target and pull against the recoil. Letting go ends the spray. <kbd className="rounded bg-surface-2 px-1.5">R</kbd> restarts, <kbd className="rounded bg-surface-2 px-1.5">F</kbd> fullscreen, <kbd className="rounded bg-surface-2 px-1.5">Esc</kbd> aborts.
+      <div className="mt-6 flex w-fit gap-1 rounded-[10px] bg-surface p-1">
+        {([['pure', 'Recoil Pure'], ['strafe', 'Recoil Strafe']] as const).map(([m, label]) => (
+          <button key={m} onClick={() => set({ mode: m })}
+            className={`rounded-md px-3.5 py-2 ${prefs.mode === m ? 'bg-surface-2 text-ink' : 'text-ink-2 hover:text-ink'}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+      <p className="mt-4 mb-4 text-ink-2">
+        {strafe
+          ? <>Spray and strafe: follow each weapon's <kbd className={kbd}>A</kbd>/<kbd className={kbd}>D</kbd> pattern on the cue bar and beeps (left ear = A, right ear = D) while you keep pulling down with the mouse. You move at the weapon's real ADS strafe speed, so track the target as it slides. Strafing on time cancels the sideways recoil. Scored on how closely your switches follow the pattern.</>
+          : <>Pick a weapon and pull against the recoil with the mouse only.</>}
+        {' '}Each run is {SPRAYS_PER_RUN} sprays: hold left click to empty a full magazine. Letting go ends the spray. <kbd className={kbd}>Tab</kbd> guide, <kbd className={kbd}>R</kbd> restarts, <kbd className={kbd}>F</kbd> fullscreen, <kbd className={kbd}>Esc</kbd> aborts.
       </p>
 
       <div className="mb-5 flex flex-wrap items-end gap-x-5 gap-y-3 rounded-xl border border-line bg-surface p-3">
         <Choice label="Range" value={prefs.rangeM} options={RANGES_M.map((r) => [r, `${r} m`])} onChange={(rangeM) => set({ rangeM })} />
         <Choice label="Optic" value={prefs.zoom} options={OPTICS.map((z) => [z, `${z}x`])} onChange={(zoom) => set({ zoom })} />
-        <Choice label="Target" value={prefs.target} options={[['static', 'Static'], ['strafe', 'Strafing']]} onChange={(target) => set({ target })} />
+        <Choice label="Target" value={prefs.target} options={[['static', 'Static'], ['strafe', 'Moving']]} onChange={(target) => set({ target })} />
+        {strafe && <Choice label="Beeps" value={prefs.strafeAudio} options={[[true, 'On'], [false, 'Off']]} onChange={(strafeAudio) => set({ strafeAudio })} />}
         <Choice label="Magazine" value={prefs.magTier} options={TIER_LABELS.map((l, i) => [i, l])} onChange={(magTier) => set({ magTier })} />
         <Choice label="Barrel" value={prefs.barrelTier} options={TIER_LABELS.map((l, i) => [i, l])} onChange={(barrelTier) => set({ barrelTier })} />
         <label className="flex flex-col gap-1 text-xs text-muted">
@@ -72,9 +87,14 @@ function RecoilRoute() {
                     <span className="text-ink-2">{CONFIDENCE[w.confidence].label}</span>
                     {w.patternNote && <span className="mt-0.5 block leading-snug text-muted">{w.patternNote}</span>}
                   </span>
+                  {strafe && w.strafe && (
+                    <span className="text-xs text-ink-2 tabular-nums" title={w.strafe.source}>
+                      Strafe: {w.strafe.phases.map(([d, ms]) => `${d === 'left' ? 'A' : d === 'right' ? 'D' : 'wait'} ${(ms / 1000).toFixed(2)}s`).join(' · ')}
+                    </span>
+                  )}
                   <span className="mt-1 text-xs text-muted tabular-nums">
                     {runs.length
-                      ? `Avg ${pct(rates.reduce((a, b) => a + b, 0) / rates.length)} · Best ${pct(Math.max(...rates))} · ${runs.length} run${runs.length === 1 ? '' : 's'}${last?.vertComp != null ? ` · last pull ${Math.round(last.vertComp * 100)}%` : ''}`
+                      ? `Avg ${pct(rates.reduce((a, b) => a + b, 0) / rates.length)} · Best ${pct(Math.max(...rates))} · ${runs.length} run${runs.length === 1 ? '' : 's'}${last?.vertComp != null ? ` · last pull ${Math.round(last.vertComp * 100)}%` : ''}${last?.strafe?.timing != null ? ` · A/D ${Math.round(last.strafe.timing * 100)}%` : ''}`
                       : 'Not played yet'}
                   </span>
                 </Link>
@@ -91,7 +111,7 @@ function RecoilRoute() {
   )
 }
 
-function Choice<T extends string | number>({ label, value, options, onChange }: {
+function Choice<T extends string | number | boolean>({ label, value, options, onChange }: {
   label: string
   value: T
   options: [T, string][]
