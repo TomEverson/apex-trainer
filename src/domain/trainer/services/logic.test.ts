@@ -72,3 +72,17 @@ describe('zoomedFov', () => {
     expect(Math.tan((zoomedFov(90, 2) / 2) * (Math.PI / 180))).toBeCloseTo(0.5)
   })
 })
+
+describe('weapon patterns', () => {
+  it('start at the first bullet and cover nearly every magazine', () => {
+    for (const w of WEAPONS) {
+      expect(w.pattern[0]).toEqual([0, 0, 0])
+      // Past the last keypoint the final step is extrapolated; never more than 3 bullets of it.
+      if (w.confidence !== 'estimate') expect(Math.max(...w.mags) - w.pattern.length, w.id).toBeLessThanOrEqual(3)
+    }
+  })
+  it('are in degrees (the R-301 capture climbs ~6.5° over 31 bullets)', () => {
+    const r301 = getWeapon('r-301')
+    expect(r301?.pattern.at(-1)?.[2]).toBeCloseTo(6.479, 3)
+  })
+})

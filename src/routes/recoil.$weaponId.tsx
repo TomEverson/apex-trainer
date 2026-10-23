@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { RecoilShots, RecoilSummary } from '../common/lib/recoil'
 import type { Tip } from '../common/lib/tracking'
 import { exitFullscreen, toggleFullscreen } from '../common/lib/fullscreen'
-import { buildDrill, getWeapon, TrainerView, zoomedFov, type Drill, type RunResult } from '../domain/trainer'
+import { buildDrill, getWeapon, RecoilGuide, TrainerView, zoomedFov, type Drill, type RunResult } from '../domain/trainer'
 import { computeRecoilSummary, diagnoseRecoil, RecoilResultsPanel } from '../domain/analysis'
 import { saveRecoilSessionFn } from '../domain/sessions'
 import { degPerCount, degPerUnit, useSettings } from '../domain/settings'
@@ -26,6 +26,7 @@ function RecoilPlayRoute() {
   const { settings, ready } = useSettings()
   const [runKey, setRunKey] = useState(0)
   const [result, setResult] = useState<Result | null>(null)
+  const [showGuide, setShowGuide] = useState(true)
   const recoil = useMemo(() => buildDrill(weapon, settings.recoil), [weapon, settings.recoil])
   const drill = useMemo((): Drill => ({ kind: 'recoil', drill: recoil }), [recoil])
   // Aiming through an optic narrows the view and, as in Apex at ADS multiplier
@@ -62,6 +63,17 @@ function RecoilPlayRoute() {
     }
   }, [recoil, settings, dpc, fovDeg])
 
+  // Tab toggles the spray guide, including mid-drill (keys still arrive under pointer lock).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return
+      e.preventDefault() // don't move focus off the canvas
+      if (!e.repeat) setShowGuide((v) => !v)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
+
   // Leaving the drill (menu, back button) exits fullscreen.
   useEffect(() => () => void exitFullscreen(), [])
 
@@ -84,7 +96,10 @@ function RecoilPlayRoute() {
     )
   }
   return (
-    <TrainerView key={runKey} drill={drill} settings={settings} degPerUnit={dpu} fovDeg={fovDeg}
-      onFinish={onFinish} onAbort={toMenu} />
+    <>
+      <TrainerView key={runKey} drill={drill} settings={settings} degPerUnit={dpu} fovDeg={fovDeg}
+        onFinish={onFinish} onAbort={toMenu} />
+      {showGuide && <RecoilGuide drill={recoil} />}
+    </>
   )
 }

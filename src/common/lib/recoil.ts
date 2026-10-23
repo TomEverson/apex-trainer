@@ -41,6 +41,14 @@ export const weaponSchema = z.object({
   jitterDeg: z.number().nonnegative(),
   /** Where the pattern came from, so recalibrated patterns don't silently mix with guesses in history. */
   source: z.string(),
+  /**
+   * measured: in-game capture, no known recoil change since. outdated: a
+   * capture the source itself marks old, or with a recoil patch after it.
+   * estimate: no capture exists; shape and size are guesses.
+   */
+  confidence: z.enum(['measured', 'outdated', 'estimate']).default('estimate'),
+  /** Why the pattern may differ from the live game. */
+  patternNote: z.string().optional(),
 })
 export type Weapon = z.infer<typeof weaponSchema>
 

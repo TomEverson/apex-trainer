@@ -259,7 +259,7 @@ export function TrainerView({ drill, settings, degPerUnit, fovDeg, onFinish, onA
             <div className="text-6xl font-extrabold [text-shadow:0_2px_20px_#000]">{overlay}</div>
             {overlay === 'Click to start' && (
               <p className="mt-3 text-sm text-ink-2">
-                {labels.name} · {drill.kind === 'recoil' ? `${drill.drill.sprays} sprays · hold left click` : `${settings.duration}s`} · R restart · F fullscreen · Esc to leave
+                {labels.name} · {drill.kind === 'recoil' ? `${drill.drill.sprays} sprays · hold left click · Tab guide` : `${settings.duration}s`} · R restart · F fullscreen · Esc to leave
               </p>
             )}
           </div>

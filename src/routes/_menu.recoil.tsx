@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import type { RecoilPrefs, WeaponClass } from '../common/lib/recoil'
 import { enterFullscreen } from '../common/lib/fullscreen'
-import { buildDrill, CLASS_LABELS, OPTICS, patternClimb, RANGES_M, SPRAY_COUNTS, TIER_LABELS, WEAPONS } from '../domain/trainer'
+import { buildDrill, CLASS_LABELS, OPTICS, patternClimb, RANGES_M, SPRAYS_PER_RUN, TIER_LABELS, WEAPONS } from '../domain/trainer'
 import { useSettings } from '../domain/settings'
 import { listRecoilSessionsFn } from '../domain/sessions'
 
@@ -11,6 +11,11 @@ export const Route = createFileRoute('/_menu/recoil')({
 })
 
 const CLASSES: WeaponClass[] = ['ar', 'smg', 'lmg']
+const CONFIDENCE = {
+  measured: { label: 'Measured pattern', cls: 'text-[#3fb67a]' },
+  outdated: { label: 'Pattern may be outdated', cls: 'text-[#e0a84a]' },
+  estimate: { label: 'Estimated pattern', cls: 'text-[#e06a5a]' },
+} as const
 const pct = (v: number) => `${(v * 100).toFixed(1)}%`
 
 function RecoilRoute() {
@@ -22,7 +27,7 @@ function RecoilRoute() {
   return (
     <>
       <p className="mt-6 mb-4 text-ink-2">
-        Pick a weapon. Hold left click to spray a full magazine at the target and pull against the recoil. Letting go ends the spray. <kbd className="rounded bg-surface-2 px-1.5">R</kbd> restarts, <kbd className="rounded bg-surface-2 px-1.5">F</kbd> fullscreen, <kbd className="rounded bg-surface-2 px-1.5">Esc</kbd> aborts.
+        Pick a weapon. Each run is {SPRAYS_PER_RUN} sprays: hold left click to empty a full magazine at the target and pull against the recoil. Letting go ends the spray. <kbd className="rounded bg-surface-2 px-1.5">R</kbd> restarts, <kbd className="rounded bg-surface-2 px-1.5">F</kbd> fullscreen, <kbd className="rounded bg-surface-2 px-1.5">Esc</kbd> aborts.
       </p>
 
       <div className="mb-5 flex flex-wrap items-end gap-x-5 gap-y-3 rounded-xl border border-line bg-surface p-3">
@@ -31,7 +36,6 @@ function RecoilRoute() {
         <Choice label="Target" value={prefs.target} options={[['static', 'Static'], ['strafe', 'Strafing']]} onChange={(target) => set({ target })} />
         <Choice label="Magazine" value={prefs.magTier} options={TIER_LABELS.map((l, i) => [i, l])} onChange={(magTier) => set({ magTier })} />
         <Choice label="Barrel" value={prefs.barrelTier} options={TIER_LABELS.map((l, i) => [i, l])} onChange={(barrelTier) => set({ barrelTier })} />
-        <Choice label="Sprays" value={prefs.sprays} options={SPRAY_COUNTS.map((n) => [n, String(n)])} onChange={(sprays) => set({ sprays })} />
         <label className="flex flex-col gap-1 text-xs text-muted">
           ADS multiplier
           <input type="number" min={0.1} max={3} step={0.05} value={prefs.adsScale}
@@ -63,6 +67,11 @@ function RecoilRoute() {
                   <span className="text-[13px] text-muted tabular-nums">
                     Climbs ~{patternClimb(drill).toFixed(1)}° over the magazine{!w.barrel && prefs.barrelTier > 0 ? ' · no barrel slot' : ''}
                   </span>
+                  <span className="text-xs" title={[w.source, w.patternNote].filter(Boolean).join(' — ')}>
+                    <span className={CONFIDENCE[w.confidence].cls}>● </span>
+                    <span className="text-ink-2">{CONFIDENCE[w.confidence].label}</span>
+                    {w.patternNote && <span className="mt-0.5 block leading-snug text-muted">{w.patternNote}</span>}
+                  </span>
                   <span className="mt-1 text-xs text-muted tabular-nums">
                     {runs.length
                       ? `Avg ${pct(rates.reduce((a, b) => a + b, 0) / rates.length)} · Best ${pct(Math.max(...rates))} · ${runs.length} run${runs.length === 1 ? '' : 's'}${last?.vertComp != null ? ` · last pull ${Math.round(last.vertComp * 100)}%` : ''}`
@@ -76,7 +85,7 @@ function RecoilRoute() {
       ))}
 
       <p className="text-xs leading-relaxed text-muted">
-        Fire rates and magazines follow the patch notes up to Season 30 Split 2. Respawn doesn't publish recoil data, so each spray shape is an approximation of the gun's known pattern — practise the shape, then check it in the Firing Range. The optic zooms the view and slows turning by its magnification; set ADS multiplier to the in-game per-optic ADS sensitivity (1.0 = default).
+        Fire rates and magazines follow the patch notes up to Season 30 Split 2. Respawn doesn't publish recoil data. Patterns are Firing Range captures from <a className="underline" href="https://github.com/metaflow/apex-recoil" target="_blank" rel="noreferrer">apex-recoil</a> (Apache 2.0) — measured with no attachments, mouse untouched — and each card says how current its capture is. Estimated patterns are guesses; check them in the Firing Range. The optic zooms the view and slows turning by its magnification; set ADS multiplier to the in-game per-optic ADS sensitivity (1.0 = default).
       </p>
     </>
   )

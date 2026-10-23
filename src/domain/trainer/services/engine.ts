@@ -193,7 +193,7 @@ export class Renderer {
     const { ctx } = this
     const cx = this.w / 2, cy = this.h / 2
     const r = Math.min(this.w, this.h) * 0.46
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)'
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.25)'
     ctx.beginPath()
     ctx.rect(0, 0, this.w, this.h)
     ctx.arc(cx, cy, r, 0, Math.PI * 2, true)

@@ -70,7 +70,7 @@ export const settingsSchema = z.object({
   /** Seconds of countdown between locking the mouse and the run going live. */
   countdownS: z.number().min(0).max(10).default(2),
   /** Recoil Control drill options (SPEC-006). */
-  recoil: recoilPrefsSchema.default({ rangeM: 20, target: 'static', magTier: 2, barrelTier: 0, sprays: 10, adsScale: 1, zoom: 1 }),
+  recoil: recoilPrefsSchema.default({ rangeM: 20, target: 'static', magTier: 2, barrelTier: 0, sprays: 5, adsScale: 1, zoom: 1 }),
 })
 export type Settings = z.infer<typeof settingsSchema>
 

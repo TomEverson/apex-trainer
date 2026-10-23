@@ -7,6 +7,7 @@ import { emptySamples, type Samples, type Scenario, type Shots } from '../../../
 import { PILL, emptyRecoilShots, expandPattern, type RecoilDrill, type RecoilShots } from '../../../common/lib/recoil'
 import { EYE, Renderer, dirTo, isOnTarget, type Camera } from './engine'
 import { createMover, mulberry32 } from './mover'
+import { shotGap } from './weapons'
 
 const PHYSICS_STEP = 1 / 480
 const DEG = Math.PI / 180
@@ -246,13 +247,6 @@ function createRecoilLogic(d: RecoilDrill, seed: number): RunLogic {
     if (spray >= d.sprays) finishedAt = t
   }
 
-  const gapAfterShot = (t: number) => {
-    if (w.burst && idx % w.burst.size === 0) return w.burst.delayS
-    let rpm = w.rpm
-    if (w.spinUp) rpm = w.spinUp.fromRpm + (w.rpm - w.spinUp.fromRpm) * Math.min(1, (t - sprayStart) / w.spinUp.seconds)
-    return 60 / rpm
-  }
-
   const fire = (t: number, cam: Camera) => {
     // The previous kick always lands before the next bullet, so an untouched
     // mouse reproduces the pattern exactly.
@@ -275,7 +269,7 @@ function createRecoilLogic(d: RecoilDrill, seed: number): RunLogic {
     ammo--
     idx++
     if (ammo === 0) return endSpray(t)
-    const gap = gapAfterShot(t)
+    const gap = shotGap(w, idx, t - sprayStart)
     const next = [pattern[idx][0] + jitter(), pattern[idx][1] + jitter()]
     kick.yaw += next[0] - off[0]
     kick.pitch += next[1] - off[1]
