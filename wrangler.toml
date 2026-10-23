@@ -1,0 +1,17 @@
+name = "aim-trainer"
+compatibility_date = "2026-07-15"
+compatibility_flags = ["nodejs_compat"]
+main = "./src/server.ts"
+
+[observability]
+enabled = true
+
+# SPEC-002 — session rows + raw samples. preview_database_id is the
+# local-only id that `pnpm dev` (Miniflare) keeps using, so local data
+# stays separate from production (database_id).
+[[d1_databases]]
+binding = "DB"
+database_name = "aim-trainer"
+database_id = "9675810e-d336-4370-b2d8-068fbece88f0"
+preview_database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"

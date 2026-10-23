@@ -1,0 +1,8 @@
+{
+  "dialect": "sqlite",
+  "camelCase": true,
+  "excludePattern": "*._*",
+  "typeMapping": {
+    "integer": "number"
+  }
+}
